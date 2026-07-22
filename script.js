@@ -34,8 +34,13 @@ const PRIORITY_KEY_BY_LABEL = {
 const MAX_TITLE_LENGTH = 100;
 const REMOVE_ANIMATION_MS = 200;
 const TOAST_DURATION_MS = 2000;
-const STORAGE_KEY = "todos";
 const THEME_STORAGE_KEY = "theme";
+
+// Supabase 연결 설정 (anon/publishable 키는 RLS 정책으로 보호되는 공개 키라 클라이언트에 노출해도 안전함)
+const SUPABASE_URL = "https://qmtlvcktrzgtnsylkafg.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_8K8YK7HiUDs6ZenXmVqQHw_T2OilUwi";
+const TODO_TABLE = "todo_tbl";
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // 디버그 로그 스위치: 개발 중에만 true로 바꿔서 콘솔 확인
 const DEBUG = false;
@@ -43,41 +48,8 @@ function log(...args) {
   if (DEBUG) console.log(...args);
 }
 
-// 전역 상태: 할 일 목록 (loadTodosFromStorage()가 페이지 로드 시 덮어씀)
-let todos = [
-  {
-    id: 1,
-    title: "기획서 초안 작성하기",
-    category: "업무", // "개인" | "공부" | "업무" | "취미"
-    completed: false,
-    priority: "높음", // "높음" | "중간" | "낮음"
-    createdAt: new Date(),
-  },
-  {
-    id: 2,
-    title: "자바스크립트 강의 듣기",
-    category: "공부",
-    completed: true,
-    priority: "중간",
-    createdAt: new Date(),
-  },
-  {
-    id: 3,
-    title: "병원 예약하기",
-    category: "개인",
-    completed: false,
-    priority: "낮음",
-    createdAt: new Date(),
-  },
-  {
-    id: 4,
-    title: "기타 연습하기",
-    category: "취미",
-    completed: false,
-    priority: "낮음",
-    createdAt: new Date(),
-  },
-];
+// 전역 상태: 할 일 목록 (loadTodosFromSupabase()가 페이지 로드 시 Supabase에서 채움)
+let todos = [];
 
 // 현재 선택된 카테고리 필터 ("전체" | "개인" | "공부" | "업무" | "취미")
 let currentFilter = "전체";
@@ -108,33 +80,41 @@ const toastContainer = document.getElementById("toastContainer");
    ========================================================= */
 
 // 새로운 할 일 추가 (제목이 비어있거나 공백뿐이면 무시)
-function addTodo(title, category, priority) {
+async function addTodo(title, category, priority) {
   const trimmedTitle = title.trim().slice(0, MAX_TITLE_LENGTH);
   if (!trimmedTitle) {
     log("addTodo: 제목이 비어있어 추가하지 않음");
     return;
   }
 
-  const newTodo = {
-    id: Date.now(),
-    title: trimmedTitle,
-    category: CATEGORY_LABELS[category],
-    completed: false,
-    priority: priority || "중간",
-    createdAt: new Date(),
-  };
+  const { data, error } = await supabaseClient
+    .from(TODO_TABLE)
+    .insert({
+      title: trimmedTitle,
+      category: CATEGORY_LABELS[category],
+      completed: false,
+      priority: priority || "중간",
+    })
+    .select()
+    .single();
 
+  if (error) {
+    log("addTodo: Supabase 저장 실패", error);
+    showToast("할 일 추가에 실패했습니다");
+    return;
+  }
+
+  const newTodo = mapRowToTodo(data);
   todos.push(newTodo);
   log("addTodo:", newTodo);
 
-  saveTodosToStorage();
   renderTodos();
   updateProgressBar();
   showToast(`"${trimmedTitle}" 추가됨`);
 }
 
 // 특정 ID의 할 일 삭제 (확인 후 페이드아웃 애니메이션 뒤 실제 삭제)
-function deleteTodo(id) {
+async function deleteTodo(id) {
   const target = todos.find((todo) => todo.id === id);
   if (!target) {
     log("deleteTodo: 해당 id를 찾을 수 없음", id);
@@ -147,13 +127,19 @@ function deleteTodo(id) {
     return;
   }
 
-  const removeFromData = () => {
+  const removeFromData = async () => {
+    const { error } = await supabaseClient.from(TODO_TABLE).delete().eq("id", id);
+    if (error) {
+      log("deleteTodo: Supabase 삭제 실패", error);
+      showToast("삭제에 실패했습니다");
+      return;
+    }
+
     const index = todos.findIndex((todo) => todo.id === id);
     if (index === -1) return;
     todos.splice(index, 1);
     log("deleteTodo:", id);
 
-    saveTodosToStorage();
     renderTodos();
     updateProgressBar();
   };
@@ -168,7 +154,7 @@ function deleteTodo(id) {
 }
 
 // 할 일의 제목과 카테고리 수정 + updatedAt 갱신
-function updateTodo(id, title, category) {
+async function updateTodo(id, title, category) {
   const target = todos.find((todo) => todo.id === id);
   if (!target) {
     log("updateTodo: 해당 id를 찾을 수 없음", id);
@@ -181,29 +167,57 @@ function updateTodo(id, title, category) {
     return;
   }
 
+  const updatedAt = new Date();
+  const { error } = await supabaseClient
+    .from(TODO_TABLE)
+    .update({
+      title: trimmedTitle,
+      category: CATEGORY_LABELS[category],
+      updated_at: updatedAt.toISOString(),
+    })
+    .eq("id", id);
+
+  if (error) {
+    log("updateTodo: Supabase 수정 실패", error);
+    showToast("수정에 실패했습니다");
+    renderTodos();
+    return;
+  }
+
   target.title = trimmedTitle;
   target.category = CATEGORY_LABELS[category];
-  target.updatedAt = new Date();
+  target.updatedAt = updatedAt;
 
   log("updateTodo:", target);
 
-  saveTodosToStorage();
   renderTodos();
   updateProgressBar();
 }
 
 // 할 일의 완료/미완료 상태 토글
-function toggleTodo(id) {
+async function toggleTodo(id) {
   const target = todos.find((todo) => todo.id === id);
   if (!target) {
     log("toggleTodo: 해당 id를 찾을 수 없음", id);
     return;
   }
 
-  target.completed = !target.completed;
+  const nextCompleted = !target.completed;
+  const { error } = await supabaseClient
+    .from(TODO_TABLE)
+    .update({ completed: nextCompleted })
+    .eq("id", id);
+
+  if (error) {
+    log("toggleTodo: Supabase 수정 실패", error);
+    showToast("상태 변경에 실패했습니다");
+    renderTodos();
+    return;
+  }
+
+  target.completed = nextCompleted;
   log("toggleTodo:", id, "completed =", target.completed);
 
-  saveTodosToStorage();
   renderTodos();
   updateProgressBar();
 }
@@ -350,33 +364,38 @@ function updateCategoryStats() {
 }
 
 /* =========================================================
-   LocalStorage
+   Supabase 연동
    ========================================================= */
 
-// todos 배열을 JSON으로 변환해 localStorage에 저장 (변경 함수들에서 매번 호출)
-function saveTodosToStorage() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
-  log("saveTodosToStorage:", todos.length, "개 저장");
+// Supabase 행(row)을 화면에서 쓰는 todo 객체 형태로 변환
+function mapRowToTodo(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    category: row.category,
+    completed: row.completed,
+    priority: row.priority,
+    createdAt: new Date(row.created_at),
+    updatedAt: row.updated_at ? new Date(row.updated_at) : undefined,
+  };
 }
 
-// localStorage에서 todos 배열을 불러와 Date 필드를 복원 (페이지 로드 시 1회 실행)
-function loadTodosFromStorage() {
-  const stored = localStorage.getItem(STORAGE_KEY);
+// Supabase todo_tbl 테이블에서 todos 배열을 불러옴 (페이지 로드 시 1회 실행)
+async function loadTodosFromSupabase() {
+  const { data, error } = await supabaseClient
+    .from(TODO_TABLE)
+    .select("*")
+    .order("created_at", { ascending: true });
 
-  if (!stored) {
+  if (error) {
+    log("loadTodosFromSupabase: 불러오기 실패", error);
     todos = [];
-    log("loadTodosFromStorage: 저장된 데이터 없음, 빈 배열로 초기화");
+    showToast("할 일을 불러오지 못했습니다");
     return;
   }
 
-  const parsed = JSON.parse(stored);
-  todos = parsed.map((todo) => ({
-    ...todo,
-    createdAt: new Date(todo.createdAt),
-    updatedAt: todo.updatedAt ? new Date(todo.updatedAt) : undefined,
-  }));
-
-  log("loadTodosFromStorage:", todos.length, "개 불러옴");
+  todos = data.map(mapRowToTodo);
+  log("loadTodosFromSupabase:", todos.length, "개 불러옴");
 }
 
 /* =========================================================
@@ -470,8 +489,8 @@ function enterEditMode(li, todo) {
    ========================================================= */
 
 // "추가" 버튼 클릭과 입력창 Enter 키가 공유하는 추가 로직
-function handleAddTodo() {
-  addTodo(todoInput.value, categorySelect.value, prioritySelect.value);
+async function handleAddTodo() {
+  await addTodo(todoInput.value, categorySelect.value, prioritySelect.value);
   todoInput.value = "";
   todoInput.focus();
 }
@@ -546,8 +565,12 @@ function initializeEventListeners() {
 /* =========================================================
    초기 실행
    ========================================================= */
-loadTheme();
-loadTodosFromStorage();
-renderTodos();
-updateProgressBar();
-initializeEventListeners();
+async function init() {
+  loadTheme();
+  await loadTodosFromSupabase();
+  renderTodos();
+  updateProgressBar();
+  initializeEventListeners();
+}
+
+init();
