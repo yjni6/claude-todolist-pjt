@@ -10,8 +10,69 @@
 <body>
   <div class="app">
 
+    <!-- 로그인 / 회원가입 화면 -->
+    <section class="auth-screen" id="authScreen">
+      <div class="auth-card">
+        <h1 class="auth-card__title">My Todo List</h1>
+
+        <nav class="auth-tabs" id="authTabs">
+          <button type="button" class="auth-tabs__button auth-tabs__button--active" id="tabLogin" data-tab="login">로그인</button>
+          <button type="button" class="auth-tabs__button" id="tabSignup" data-tab="signup">회원가입</button>
+        </nav>
+
+        <form class="auth-form" id="loginForm" novalidate>
+          <input
+            type="email"
+            id="loginEmail"
+            class="auth-form__input"
+            placeholder="이메일"
+            autocomplete="email"
+          />
+          <input
+            type="password"
+            id="loginPassword"
+            class="auth-form__input"
+            placeholder="비밀번호"
+            autocomplete="current-password"
+          />
+          <p class="auth-form__error hidden" id="loginError"></p>
+          <button type="submit" class="auth-form__submit">로그인</button>
+        </form>
+
+        <form class="auth-form hidden" id="signupForm" novalidate>
+          <input
+            type="email"
+            id="signupEmail"
+            class="auth-form__input"
+            placeholder="이메일"
+            autocomplete="email"
+          />
+          <input
+            type="password"
+            id="signupPassword"
+            class="auth-form__input"
+            placeholder="비밀번호"
+            autocomplete="new-password"
+          />
+          <input
+            type="password"
+            id="signupPasswordConfirm"
+            class="auth-form__input"
+            placeholder="비밀번호 확인"
+            autocomplete="new-password"
+          />
+          <p class="auth-form__error hidden" id="signupError"></p>
+          <button type="submit" class="auth-form__submit">회원가입</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- 할 일 관리 화면: 로그인해야 표시됨 -->
+    <div class="todo-screen hidden" id="todoScreen">
+
     <!-- 헤더: 제목 + 전체 진행률 + 다크모드 토글 -->
     <header class="app-header" id="appHeader">
+      <button type="button" class="app-header__logout-btn" id="logoutBtn">로그아웃</button>
       <button type="button" class="app-header__theme-toggle" id="themeToggle" aria-label="다크 모드 전환">🌙</button>
       <h1 class="app-header__title">My Todo List</h1>
       <p class="app-header__progress" id="headerProgress">완료율 0%</p>
@@ -118,6 +179,8 @@
 
     <!-- 목록이 비었을 때 표시할 안내 문구 -->
     <p class="todo-list__empty hidden" id="emptyMessage">할 일을 추가해보세요</p>
+
+    </div>
 
   </div>
 

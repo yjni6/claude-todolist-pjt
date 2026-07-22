@@ -2,8 +2,6 @@
    데이터 구조
    ========================================================= */
 
-// 카테고리 내부 키(personal/study/work/hobby) <-> 한글 라벨 매핑
-// HTML의 select/data-filter/뱃지 클래스는 영문 키를 쓰고, todos 데이터는 한글 라벨을 쓰기 때문에 필요
 const CATEGORY_LABELS = {
   personal: "개인",
   study: "공부",
@@ -18,7 +16,6 @@ const CATEGORY_KEY_BY_LABEL = {
   취미: "hobby",
 };
 
-// 우선순위 라벨 -> 점 아이콘 / CSS 클래스 키 매핑
 const PRIORITY_DOTS = {
   높음: "●●●",
   중간: "●●",
@@ -42,7 +39,6 @@ const SUPABASE_ANON_KEY = "sb_publishable_8K8YK7HiUDs6ZenXmVqQHw_T2OilUwi";
 const TODO_TABLE = "todo_tbl";
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// 디버그 로그 스위치: 개발 중에만 true로 바꿔서 콘솔 확인
 const DEBUG = false;
 function log(...args) {
   if (DEBUG) console.log(...args);
@@ -51,10 +47,11 @@ function log(...args) {
 // 전역 상태: 할 일 목록 (loadTodosFromSupabase()가 페이지 로드 시 Supabase에서 채움)
 let todos = [];
 
-// 현재 선택된 카테고리 필터 ("전체" | "개인" | "공부" | "업무" | "취미")
+// 현재 로그인한 사용자의 id (Supabase Auth uuid, 로그인/로그아웃 시 갱신됨)
+let currentUserId = null;
+
 let currentFilter = "전체";
 
-// 현재 검색어 (소문자로 저장, 빈 문자열이면 검색 없음)
 let currentSearch = "";
 
 /* =========================================================
@@ -74,12 +71,27 @@ const headerProgress = document.getElementById("headerProgress");
 const categoryStats = document.getElementById("categoryStats");
 const themeToggle = document.getElementById("themeToggle");
 const toastContainer = document.getElementById("toastContainer");
+const logoutBtn = document.getElementById("logoutBtn");
+
+const authScreen = document.getElementById("authScreen");
+const todoScreen = document.getElementById("todoScreen");
+const authTabs = document.getElementById("authTabs");
+const tabLogin = document.getElementById("tabLogin");
+const tabSignup = document.getElementById("tabSignup");
+const loginForm = document.getElementById("loginForm");
+const loginEmail = document.getElementById("loginEmail");
+const loginPassword = document.getElementById("loginPassword");
+const loginError = document.getElementById("loginError");
+const signupForm = document.getElementById("signupForm");
+const signupEmail = document.getElementById("signupEmail");
+const signupPassword = document.getElementById("signupPassword");
+const signupPasswordConfirm = document.getElementById("signupPasswordConfirm");
+const signupError = document.getElementById("signupError");
 
 /* =========================================================
    핵심 함수: 추가 / 삭제 / 수정 / 토글
    ========================================================= */
 
-// 새로운 할 일 추가 (제목이 비어있거나 공백뿐이면 무시)
 async function addTodo(title, category, priority) {
   const trimmedTitle = title.trim().slice(0, MAX_TITLE_LENGTH);
   if (!trimmedTitle) {
@@ -94,6 +106,7 @@ async function addTodo(title, category, priority) {
       category: CATEGORY_LABELS[category],
       completed: false,
       priority: priority || "중간",
+      user_id: currentUserId,
     })
     .select()
     .single();
@@ -113,7 +126,6 @@ async function addTodo(title, category, priority) {
   showToast(`"${trimmedTitle}" 추가됨`);
 }
 
-// 특정 ID의 할 일 삭제 (확인 후 페이드아웃 애니메이션 뒤 실제 삭제)
 async function deleteTodo(id) {
   const target = todos.find((todo) => todo.id === id);
   if (!target) {
@@ -153,7 +165,6 @@ async function deleteTodo(id) {
   }
 }
 
-// 할 일의 제목과 카테고리 수정 + updatedAt 갱신
 async function updateTodo(id, title, category) {
   const target = todos.find((todo) => todo.id === id);
   if (!target) {
@@ -194,7 +205,6 @@ async function updateTodo(id, title, category) {
   updateProgressBar();
 }
 
-// 할 일의 완료/미완료 상태 토글
 async function toggleTodo(id) {
   const target = todos.find((todo) => todo.id === id);
   if (!target) {
@@ -226,8 +236,6 @@ async function toggleTodo(id) {
    렌더링
    ========================================================= */
 
-// todos 배열을 현재 필터/검색어에 맞게 화면에 렌더링
-// 완료된 항목은 목록 하단으로 정렬되어 미완료 항목과 시각적으로 구분됨
 function renderTodos() {
   const filtered = todos.filter((todo) => {
     const matchesFilter = currentFilter === "전체" || todo.category === currentFilter;
@@ -247,7 +255,6 @@ function renderTodos() {
   log("renderTodos: 렌더링 완료", sorted.length, "개 표시");
 }
 
-// 할 일 하나에 대한 <li> 엘리먼트 생성 (이벤트는 여기서 붙이지 않고 상위에서 위임 처리)
 function createTodoElement(todo) {
   const categoryKey = CATEGORY_KEY_BY_LABEL[todo.category];
   const priority = todo.priority || "중간";
@@ -299,7 +306,6 @@ function createTodoElement(todo) {
    필터 / 검색
    ========================================================= */
 
-// 카테고리로 필터링 ("전체" | "개인" | "공부" | "업무" | "취미")
 function filterByCategory(category) {
   currentFilter = category;
 
@@ -312,7 +318,6 @@ function filterByCategory(category) {
   renderTodos();
 }
 
-// 제목으로 실시간 검색 (대소문자 무시)
 function searchTodos(term) {
   currentSearch = term.trim().toLowerCase();
   log("searchTodos:", currentSearch);
@@ -323,7 +328,6 @@ function searchTodos(term) {
    진행률 계산
    ========================================================= */
 
-// 전체/완료 개수와 진행률(%) 계산 → { completed, total, percentage }
 function calculateProgress() {
   const total = todos.length;
   const completed = todos.filter((todo) => todo.completed).length;
@@ -332,8 +336,6 @@ function calculateProgress() {
   return { completed, total, percentage };
 }
 
-// 진행 바 너비 / 완료 텍스트 / 헤더 진행률 / 카테고리별 진행률 갱신
-// todos가 변경될 때마다(추가/삭제/수정/토글 이후) 호출됨
 function updateProgressBar() {
   const { completed, total, percentage } = calculateProgress();
 
@@ -345,7 +347,6 @@ function updateProgressBar() {
   log("updateProgressBar:", { completed, total, percentage });
 }
 
-// 카테고리별 완료/전체 개수 표시 (예: "업무: 1/2 ✓")
 function updateCategoryStats() {
   categoryStats.innerHTML = "";
 
@@ -367,7 +368,6 @@ function updateCategoryStats() {
    Supabase 연동
    ========================================================= */
 
-// Supabase 행(row)을 화면에서 쓰는 todo 객체 형태로 변환
 function mapRowToTodo(row) {
   return {
     id: row.id,
@@ -380,11 +380,12 @@ function mapRowToTodo(row) {
   };
 }
 
-// Supabase todo_tbl 테이블에서 todos 배열을 불러옴 (페이지 로드 시 1회 실행)
+// Supabase todo_tbl 테이블에서 현재 로그인한 사용자의 todos 배열을 불러옴 (로그인 시 1회 실행)
 async function loadTodosFromSupabase() {
   const { data, error } = await supabaseClient
     .from(TODO_TABLE)
     .select("*")
+    .eq("user_id", currentUserId)
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -399,22 +400,183 @@ async function loadTodosFromSupabase() {
 }
 
 /* =========================================================
+   계정 (Supabase Auth 로그인 / 회원가입)
+   ========================================================= */
+
+function setAuthError(el, message) {
+  el.textContent = message;
+  el.classList.toggle("hidden", !message);
+}
+
+function translateAuthError(message) {
+  if (!message) return "";
+  if (message.includes("Invalid login credentials")) {
+    return "이메일 또는 비밀번호가 올바르지 않습니다";
+  }
+  if (message.includes("already registered") || message.includes("already been registered")) {
+    return "이미 가입된 이메일입니다";
+  }
+  if (message.includes("Password should be at least")) {
+    return "비밀번호는 최소 6자 이상이어야 합니다";
+  }
+  if (message.includes("valid email")) {
+    return "올바른 이메일 형식이 아닙니다";
+  }
+  return message;
+}
+
+// 회원가입: Supabase Auth signUp 호출 (계정이 만들어지면 트리거가 user_tbl에 프로필 행도 생성함)
+async function handleSignup(email, password, passwordConfirm) {
+  const trimmedEmail = email.trim();
+
+  if (!trimmedEmail || !password) {
+    setAuthError(signupError, "이메일과 비밀번호를 입력해주세요");
+    return null;
+  }
+
+  if (password !== passwordConfirm) {
+    setAuthError(signupError, "비밀번호가 일치하지 않습니다");
+    return null;
+  }
+
+  const { data, error } = await supabaseClient.auth.signUp({
+    email: trimmedEmail,
+    password,
+  });
+
+  if (error) {
+    log("handleSignup: Supabase signUp 실패", error);
+    setAuthError(signupError, translateAuthError(error.message));
+    return null;
+  }
+
+  setAuthError(signupError, "");
+  log("handleSignup:", trimmedEmail);
+  return { needsEmailConfirmation: !data.session };
+}
+
+// 로그인: Supabase Auth signInWithPassword 호출
+async function handleLogin(email, password) {
+  const trimmedEmail = email.trim();
+
+  if (!trimmedEmail || !password) {
+    setAuthError(loginError, "이메일과 비밀번호를 입력해주세요");
+    return false;
+  }
+
+  const { data, error } = await supabaseClient.auth.signInWithPassword({
+    email: trimmedEmail,
+    password,
+  });
+
+  if (error) {
+    log("handleLogin: Supabase signIn 실패", error);
+    setAuthError(loginError, translateAuthError(error.message));
+    return false;
+  }
+
+  setAuthError(loginError, "");
+  currentUserId = data.user.id;
+  log("handleLogin:", trimmedEmail);
+  return true;
+}
+
+function switchAuthTab(tab) {
+  const isLogin = tab === "login";
+
+  tabLogin.classList.toggle("auth-tabs__button--active", isLogin);
+  tabSignup.classList.toggle("auth-tabs__button--active", !isLogin);
+  loginForm.classList.toggle("hidden", !isLogin);
+  signupForm.classList.toggle("hidden", isLogin);
+  setAuthError(loginError, "");
+  setAuthError(signupError, "");
+}
+
+let todoScreenInitialized = false;
+
+async function showTodoScreen() {
+  authScreen.classList.add("hidden");
+  todoScreen.classList.remove("hidden");
+
+  if (!todoScreenInitialized) {
+    initializeEventListeners();
+    todoScreenInitialized = true;
+  }
+
+  await loadTodosFromSupabase();
+  renderTodos();
+  updateProgressBar();
+}
+
+function showAuthScreen() {
+  todoScreen.classList.add("hidden");
+  authScreen.classList.remove("hidden");
+  switchAuthTab("login");
+}
+
+async function handleLogout() {
+  await supabaseClient.auth.signOut();
+  currentUserId = null;
+  showAuthScreen();
+  log("handleLogout");
+}
+
+function initializeAuthEventListeners() {
+  authTabs.addEventListener("click", (e) => {
+    const button = e.target.closest(".auth-tabs__button");
+    if (!button) return;
+    switchAuthTab(button.dataset.tab);
+  });
+
+  loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const success = await handleLogin(loginEmail.value, loginPassword.value);
+    if (success) {
+      loginForm.reset();
+      await showTodoScreen();
+    }
+  });
+
+  signupForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const result = await handleSignup(
+      signupEmail.value,
+      signupPassword.value,
+      signupPasswordConfirm.value
+    );
+    if (result) {
+      const signedUpEmail = signupEmail.value.trim();
+      signupForm.reset();
+      switchAuthTab("login");
+      loginEmail.value = signedUpEmail;
+      loginPassword.focus();
+      showToast(
+        result.needsEmailConfirmation
+          ? "가입 확인 이메일을 보냈습니다. 이메일 인증 후 로그인해주세요"
+          : "회원가입이 완료되었습니다. 로그인해주세요"
+      );
+    }
+  });
+
+  logoutBtn.addEventListener("click", handleLogout);
+
+  log("initializeAuthEventListeners: 이벤트 리스너 등록 완료");
+}
+
+/* =========================================================
    다크 모드
    ========================================================= */
 
-// 테마를 <html data-theme="..">에 적용하고 토글 버튼 아이콘을 갱신
 function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
   themeToggle.textContent = theme === "dark" ? "☀️" : "🌙";
 }
 
-// localStorage에 저장된 테마를 읽어와 적용 (페이지 로드 시 실행)
 function loadTheme() {
   const saved = localStorage.getItem(THEME_STORAGE_KEY);
   applyTheme(saved === "dark" ? "dark" : "light");
 }
 
-// 라이트 <-> 다크 모드 전환 후 선택값을 localStorage에 저장
 function toggleTheme() {
   const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
   applyTheme(next);
@@ -426,7 +588,6 @@ function toggleTheme() {
    사용자 피드백 (토스트)
    ========================================================= */
 
-// 화면 하단에 짧게 사라지는 토스트 메시지 표시
 function showToast(message) {
   const toast = document.createElement("div");
   toast.className = "toast";
@@ -440,9 +601,6 @@ function showToast(message) {
    인라인 수정
    ========================================================= */
 
-// 할 일 항목을 인라인 수정 모드로 전환
-// Enter 또는 외부 클릭(blur) 시 저장, Escape 시 취소
-// isFinished 가드로 Enter 저장 후 뒤따르는 blur가 updateTodo를 중복 호출하지 않도록 방지
 function enterEditMode(li, todo) {
   const titleEl = li.querySelector(".todo-item__title");
 
@@ -488,17 +646,12 @@ function enterEditMode(li, todo) {
    이벤트 리스너 초기화
    ========================================================= */
 
-// "추가" 버튼 클릭과 입력창 Enter 키가 공유하는 추가 로직
 async function handleAddTodo() {
   await addTodo(todoInput.value, categorySelect.value, prioritySelect.value);
   todoInput.value = "";
   todoInput.focus();
 }
 
-// 모든 이벤트는 페이지 로드 시 한 번만 등록한다.
-// 할 일 항목(체크박스/수정/삭제 버튼)은 renderTodos()가 DOM을 다시 그릴 때마다
-// 새로 생성되므로, 항목 개별로 리스너를 붙이면 중복 등록이 발생한다.
-// 대신 부모 요소(todoList)에 이벤트 위임(delegation)으로 한 번만 등록해 이를 방지한다.
 function initializeEventListeners() {
   addBtn.addEventListener("click", handleAddTodo);
 
@@ -510,7 +663,6 @@ function initializeEventListeners() {
 
   themeToggle.addEventListener("click", toggleTheme);
 
-  // 할 일 목록: 수정 / 삭제 버튼 클릭 (이벤트 위임)
   todoList.addEventListener("click", (e) => {
     const li = e.target.closest(".todo-item");
     if (!li) return;
@@ -526,7 +678,6 @@ function initializeEventListeners() {
     }
   });
 
-  // 할 일 목록: 체크박스 토글 (이벤트 위임) + 완료 시 짧은 플래시 애니메이션
   todoList.addEventListener("change", (e) => {
     if (!e.target.classList.contains("todo-item__checkbox")) return;
 
@@ -549,7 +700,6 @@ function initializeEventListeners() {
     }
   });
 
-  // 필터 버튼 클릭 (이벤트 위임)
   filterNav.addEventListener("click", (e) => {
     const button = e.target.closest(".filter__button");
     if (!button) return;
@@ -567,10 +717,18 @@ function initializeEventListeners() {
    ========================================================= */
 async function init() {
   loadTheme();
-  await loadTodosFromSupabase();
-  renderTodos();
-  updateProgressBar();
-  initializeEventListeners();
+  initializeAuthEventListeners();
+
+  const {
+    data: { session },
+  } = await supabaseClient.auth.getSession();
+
+  if (session) {
+    currentUserId = session.user.id;
+    await showTodoScreen();
+  } else {
+    showAuthScreen();
+  }
 }
 
 init();
