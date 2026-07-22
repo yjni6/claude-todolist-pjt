@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Todo List</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+
+    <!-- 헤더: 제목 + 전체 진행률 + 다크모드 토글 -->
+    <header class="app-header" id="appHeader">
+      <button type="button" class="app-header__theme-toggle" id="themeToggle" aria-label="다크 모드 전환">🌙</button>
+      <h1 class="app-header__title">My Todo List</h1>
+      <p class="app-header__progress" id="headerProgress">완료율 0%</p>
+    </header>
+
+    <!-- 입력 영역 -->
+    <section class="todo-form" id="todoForm">
+      <input
+        type="text"
+        id="todoInput"
+        class="todo-form__input"
+        placeholder="할 일을 입력하세요"
+        autocomplete="off"
+        maxlength="100"
+      />
+      <select id="categorySelect" class="todo-form__select">
+        <option value="personal">개인</option>
+        <option value="study">공부</option>
+        <option value="work">업무</option>
+        <option value="hobby">취미</option>
+      </select>
+      <select id="prioritySelect" class="todo-form__select">
+        <option value="높음">높음</option>
+        <option value="중간" selected>중간</option>
+        <option value="낮음">낮음</option>
+      </select>
+      <button type="button" id="addBtn" class="todo-form__button">추가</button>
+    </section>
+
+    <!-- 검색 영역 -->
+    <section class="search" id="search">
+      <input
+        type="search"
+        id="searchInput"
+        class="search__input"
+        placeholder="할 일 제목으로 검색"
+        autocomplete="off"
+      />
+    </section>
+
+    <!-- 필터 영역 -->
+    <nav class="filter" id="filter">
+      <button type="button" class="filter__button filter__button--active" id="filterAll" data-filter="all">전체</button>
+      <button type="button" class="filter__button" id="filterPersonal" data-filter="personal">개인</button>
+      <button type="button" class="filter__button" id="filterStudy" data-filter="study">공부</button>
+      <button type="button" class="filter__button" id="filterWork" data-filter="work">업무</button>
+      <button type="button" class="filter__button" id="filterHobby" data-filter="hobby">취미</button>
+    </nav>
+
+    <!-- 통계 영역 -->
+    <section class="stats" id="stats">
+      <div class="stats__bar" id="progressBar">
+        <div class="stats__bar-fill" id="progressBarFill"></div>
+      </div>
+      <p class="stats__count" id="todoCount">0/0 (0%)</p>
+      <div class="stats__categories" id="categoryStats"></div>
+    </section>
+
+    <!-- 할 일 목록 영역 -->
+    <ul class="todo-list" id="todoList">
+
+      <!-- 예시 항목 (JavaScript로 동적 생성될 항목의 참고용 마크업) -->
+      <li class="todo-item" data-id="1" data-category="work">
+        <input type="checkbox" class="todo-item__checkbox" id="todoCheckbox-1" />
+        <span class="todo-item__title">기획서 초안 작성하기</span>
+        <span class="todo-item__badge todo-item__badge--work">업무</span>
+        <div class="todo-item__actions">
+          <button type="button" class="todo-item__edit-btn">수정</button>
+          <button type="button" class="todo-item__delete-btn">삭제</button>
+        </div>
+      </li>
+
+      <li class="todo-item todo-item--completed" data-id="2" data-category="study">
+        <input type="checkbox" class="todo-item__checkbox" id="todoCheckbox-2" checked />
+        <span class="todo-item__title">자바스크립트 강의 듣기</span>
+        <span class="todo-item__badge todo-item__badge--study">공부</span>
+        <div class="todo-item__actions">
+          <button type="button" class="todo-item__edit-btn">수정</button>
+          <button type="button" class="todo-item__delete-btn">삭제</button>
+        </div>
+      </li>
+
+      <li class="todo-item" data-id="3" data-category="personal">
+        <input type="checkbox" class="todo-item__checkbox" id="todoCheckbox-3" />
+        <span class="todo-item__title">병원 예약하기</span>
+        <span class="todo-item__badge todo-item__badge--personal">개인</span>
+        <div class="todo-item__actions">
+          <button type="button" class="todo-item__edit-btn">수정</button>
+          <button type="button" class="todo-item__delete-btn">삭제</button>
+        </div>
+      </li>
+
+      <li class="todo-item" data-id="4" data-category="hobby">
+        <input type="checkbox" class="todo-item__checkbox" id="todoCheckbox-4" />
+        <span class="todo-item__title">기타 연습하기</span>
+        <span class="todo-item__badge todo-item__badge--hobby">취미</span>
+        <div class="todo-item__actions">
+          <button type="button" class="todo-item__edit-btn">수정</button>
+          <button type="button" class="todo-item__delete-btn">삭제</button>
+        </div>
+      </li>
+
+    </ul>
+
+    <!-- 목록이 비었을 때 표시할 안내 문구 -->
+    <p class="todo-list__empty hidden" id="emptyMessage">할 일을 추가해보세요</p>
+
+  </div>
+
+  <!-- 토스트 메시지 컨테이너 -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>
